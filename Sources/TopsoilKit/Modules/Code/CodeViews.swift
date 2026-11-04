@@ -153,34 +153,52 @@ struct CodeExpandedView: View {
 private struct EmbeddedTerminalView: NSViewRepresentable {
     let terminal: NotchTerminal
     let isFocused: Bool
+    let onFocus: () -> Void
     @Environment(\.notchTokens) private var tokens
 
+    final class Coordinator {
+        var isFocused = false
+        var focusRequest: DispatchWorkItem?
+        weak var terminal: NotchTerminal?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSView {
-        terminal.terminalView
+        context.coordinator.terminal = terminal
+        return terminal.terminalView
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.focusRequest?.cancel()
+        coordinator.terminal?.onFocus = nil
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         // Caret + selection follow the app's live accent so the terminal matches
         // whatever theme colour the notch is using.
         terminal.applyAccent(NSColor(tokens.accent))
+        terminal.onFocus = onFocus
 
+        let coordinator = context.coordinator
+        guard coordinator.isFocused != isFocused else { return }
+        coordinator.isFocused = isFocused
+        coordinator.focusRequest?.cancel()
         guard isFocused else { return }
-        DispatchQueue.main.async {
-            guard let window = nsView.window else { return }
-            if !window.isKeyWindow {
-                NSApp.activate(ignoringOtherApps: true)
-                window.makeKey()
-            }
-            if window.firstResponder !== nsView {
-                window.makeFirstResponder(nsView)
-            }
+        let request = DispatchWorkItem { [weak nsView, weak coordinator] in
+            guard coordinator?.isFocused == true, let nsView, let window = nsView.window else { return }
+            if !window.isKeyWindow { window.makeKey() }
+            if window.firstResponder !== nsView { window.makeFirstResponder(nsView) }
         }
+        coordinator.focusRequest = request
+        DispatchQueue.main.async(execute: request)
     }
 }
 
 // MARK: - Split terminal panes
 
 private struct SplitTerminalPane: View {
+    @Environment(\.notchTokens) private var tokens
     let descriptor: CodeTerminalPaneDescriptor
     @ObservedObject var terminal: NotchTerminal
     let isFocused: Bool
@@ -192,25 +210,27 @@ private struct SplitTerminalPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            titleBar
+            titleBar.onTapGesture { onFocus(); terminal.focus() }
             if terminal.activeCLI == nil {
-                idleBody
+                idleBody.onTapGesture(perform: onFocus)
             } else {
-                EmbeddedTerminalView(terminal: terminal, isFocused: isFocused)
+                EmbeddedTerminalView(terminal: terminal, isFocused: isFocused, onFocus: onFocus)
+                    .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .help("Scroll to review earlier output. Full-screen agents manage their own history.")
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.black.opacity(isFocused ? 0.48 : 0.36))
+                .fill(Color.white.opacity(isFocused ? 0.055 : 0.025))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(isFocused ? 0.12 : 0.035), lineWidth: 0.7)
+                        .strokeBorder(isFocused ? tokens.accent.opacity(0.5) : Color.white.opacity(0.10), lineWidth: 0.7)
                 )
         )
         .contentShape(Rectangle())
-        .onTapGesture(perform: onFocus)
     }
 
     private var titleBar: some View {
@@ -221,9 +241,9 @@ private struct SplitTerminalPane: View {
                 Text(descriptor.displayName)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.82))
-                Text("$ \(descriptor.executableName)")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.28))
+                Text(terminal.activeCLI == nil ? "Ready" : (terminal.isRunning ? "Running" : "Session ended"))
+                    .font(tokens.captionFont)
+                    .foregroundStyle(tokens.textSecondary)
             }
 
             Spacer(minLength: 4)
@@ -236,11 +256,17 @@ private struct SplitTerminalPane: View {
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Start \(descriptor.displayName)")
                 .help("Run \(descriptor.displayName)")
             } else {
-                Circle()
-                    .fill(terminal.isRunning ? Color(red: 0.26, green: 0.79, blue: 0.40) : .white.opacity(0.25))
-                    .frame(width: 5, height: 5)
+                Button(action: terminal.scrollToLatest) {
+                    Image(systemName: "arrow.down.to.line")
+                        .foregroundStyle(tokens.textSecondary)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Scroll \(descriptor.displayName) to latest output")
+                .help("Latest output")
 
                 Button(action: onStop) {
                     Image(systemName: "xmark")
@@ -249,6 +275,7 @@ private struct SplitTerminalPane: View {
                         .frame(width: 22, height: 22)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Close \(descriptor.displayName)")
                 .help("Close \(descriptor.displayName)")
             }
         }
@@ -259,18 +286,15 @@ private struct SplitTerminalPane: View {
 
     private var idleBody: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "terminal")
-                .font(.system(size: 16, weight: .medium))
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 20, weight: .light))
                 .foregroundStyle(accentColor.opacity(0.70))
-            Text("Ready")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.55))
             Button(action: onLaunch) {
                 HStack(spacing: 5) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 8, weight: .semibold))
-                    Text("run")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    Text("Start session")
+                        .font(tokens.labelFont)
                 }
                 .foregroundStyle(.black.opacity(0.78))
                 .padding(.horizontal, 9)

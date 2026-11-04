@@ -6,6 +6,8 @@ struct StocksDashboardTile: View {
     let quotes: [StockQuote]
     let tickers: [String]
     let trendingRepos: [TrendingRepository]
+    var staleSymbols: Set<String> = []
+    var reposStale: Bool = false
     let installedSkills: [InstalledCodingSkill]
     let isFetching: Bool
     let isFetchingTrends: Bool
@@ -91,14 +93,26 @@ struct StocksDashboardTile: View {
             if isEditing {
                 addRow.transition(.move(edge: .top).combined(with: .opacity))
             }
+            if !staleSymbols.isEmpty {
+                Label(quotes.isEmpty ? "Quotes unavailable · retrying" : "Some quotes are out of date", systemImage: "clock.arrow.circlepath")
+                    .font(tokens.captionFont)
+                    .foregroundStyle(tokens.warning)
+            }
             if isFetching && quotes.isEmpty {
-                emptyLine("Fetching quotes")
+                loadingRows
             } else if quotes.isEmpty {
-                emptyLine("Tap + to add a ticker")
+                emptyLine(tickers.isEmpty ? "Tap + to add a ticker" : "Quotes unavailable")
             } else {
-                VStack(spacing: 5) {
-                    ForEach(quotes.indices, id: \.self) { i in
-                        StockRow(quote: quotes[i])
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 5) {
+                        ForEach(quotes, id: \.symbol) { quote in
+                            VStack(alignment: .leading, spacing: 2) {
+                                StockRow(quote: quote)
+                                if staleSymbols.contains(quote.symbol) {
+                                    Text("Last available quote").font(tokens.captionFont).foregroundStyle(tokens.warning)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -110,8 +124,13 @@ struct StocksDashboardTile: View {
     private var repoColumn: some View {
         VStack(alignment: .leading, spacing: 7) {
             sectionLabel("Repos today", systemImage: "star")
+            if reposStale {
+                Label(trendingRepos.isEmpty ? "GitHub unavailable · retrying" : "Showing last available repos", systemImage: "clock.arrow.circlepath")
+                    .font(tokens.captionFont)
+                    .foregroundStyle(tokens.warning)
+            }
             if isFetchingTrends && trendingRepos.isEmpty {
-                emptyLine("Fetching GitHub trends")
+                loadingRows
             } else if trendingRepos.isEmpty {
                 emptyLine("No repo trends yet")
             } else {
@@ -159,6 +178,18 @@ struct StocksDashboardTile: View {
                     .foregroundStyle(.white.opacity(0.28))
             }
         }
+    }
+
+    private var loadingRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(0..<3) { _ in
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.white.opacity(0.08))
+                    .frame(height: 32)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
     }
 
     private func emptyLine(_ text: String) -> some View {

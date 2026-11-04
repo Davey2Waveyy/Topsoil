@@ -67,6 +67,12 @@ public struct NotchThemeTokens: Equatable, Sendable {
     public var textTertiary: Color { .white.opacity(0.60) }
     public var textQuaternary: Color { .white.opacity(0.46) }
 
+    // Shared semantic colors; pair with a label or icon in every status view.
+    public var success: Color { Color(red: 0.40, green: 0.85, blue: 0.56) }
+    public var warning: Color { Color(red: 1.0, green: 0.76, blue: 0.40) }
+    public var error: Color { Color(red: 1.0, green: 0.48, blue: 0.48) }
+    public var information: Color { Color(red: 0.48, green: 0.76, blue: 1.0) }
+
     // MARK: Controls
 
     /// Inner controls sit 2pt tighter than the tile radius so nesting reads

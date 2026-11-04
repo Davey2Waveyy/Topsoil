@@ -66,6 +66,7 @@ final class SystemModule: NotchModule {
                 await self?.refresh()
             }
         }
+        timer?.tolerance = EnergyRefreshPolicy.tolerance(for: 15)
     }
 
     // MARK: - Battery alerts

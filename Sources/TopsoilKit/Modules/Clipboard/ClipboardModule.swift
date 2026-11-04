@@ -40,12 +40,14 @@ final class ClipboardModule: NotchModule {
     }
 
     func activate() {
+        guard timer == nil else { return }
         // Sync the baseline change count so we only track NEW copies from here on.
         lastChangeCount = NSPasteboard.general.changeCount
         state.entries = store.entries
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.poll() }
         }
+        timer?.tolerance = EnergyRefreshPolicy.tolerance(for: 5)
         if let timer { RunLoop.main.add(timer, forMode: .common) }
     }
 

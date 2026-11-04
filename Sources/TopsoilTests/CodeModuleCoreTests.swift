@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TopsoilKit
 
@@ -68,6 +69,35 @@ func codeModuleCoreTests() {
         expect(pathParts.contains("/Applications/Cursor.app/Contents/Resources/app/bin"), "Cursor CLI path is included")
         expect(pathParts.contains("/Applications/Codex.app/Contents/Resources"), "Codex CLI path is included")
         expect(pathParts.contains("/usr/bin"), "original PATH is preserved")
+    }
+
+    test("terminal: clicking can acquire keyboard focus in the notch panel") {
+        MainActor.assumeIsolated {
+            let terminal = NotchTerminal()
+            let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 260),
+                                styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.becomesKeyOnlyIfNeeded = true
+            panel.contentView = terminal.terminalView
+            panel.makeFirstResponder(nil)
+            let click = terminal.terminalView.gestureRecognizers.compactMap { $0 as? NSClickGestureRecognizer }.first
+            expect(click != nil, "terminal installs a native click focus handler")
+            if let click, let action = click.action {
+                _ = click.target?.perform(action, with: click)
+            }
+            expect(panel.firstResponder === terminal.terminalView,
+                   "clicking the terminal restores the keyboard responder")
+        }
+    }
+
+    test("terminal: retains long scrollback and can return to latest output") {
+        MainActor.assumeIsolated {
+            let terminal = NotchTerminal()
+            for line in 0..<700 { terminal.terminalView.feed(text: "line-\(line)\r\n") }
+            terminal.terminalView.scroll(toPosition: 0)
+            expect(terminal.snapshotText().contains("line-0"), "early output remains beyond 500 lines")
+            terminal.scrollToLatest()
+            expect(terminal.terminalView.scrollPosition == 1, "latest control returns viewport to bottom")
+        }
     }
 
     test("terminal: SwiftTerm PTY renders process output and forwards typed input") {

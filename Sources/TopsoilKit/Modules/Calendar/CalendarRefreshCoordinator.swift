@@ -43,9 +43,11 @@ public final class CalendarRefreshCoordinator {
         }
         self.makeTimer = makeTimer ?? { action in
             let box = CallbackBox(action)
-            return Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            let timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
                 box.action()
             }
+            timer.tolerance = 6
+            return timer
         }
     }
 

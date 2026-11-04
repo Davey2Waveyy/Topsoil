@@ -31,6 +31,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSCalendarsUsageDescription</key>
   <string>Topsoil shows your upcoming events in the notch.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Topsoil shows your upcoming events in the notch.</string>
   <key>NSAppleEventsUsageDescription</key>
   <string>Topsoil controls Music and Spotify playback from the notch.</string>
 </dict>

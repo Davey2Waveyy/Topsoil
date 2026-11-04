@@ -10,11 +10,13 @@ final class CalendarModule: NotchModule {
 
     final class StateBox: ObservableObject {
         @Published var events: [CalEvent] = []
+        @Published var weekEvents: [CalEvent] = []
         @Published var accessDenied = false
     }
 
     private let state = StateBox()
     private let store = EKEventStore()
+    private var isRefreshing = false
     private let refreshCoordinator = CalendarRefreshCoordinator()
 
     func collapsedView() -> AnyView? {
@@ -45,25 +47,41 @@ final class CalendarModule: NotchModule {
     }
 
     func refresh() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
         let granted = (try? await store.requestFullAccessToEvents()) ?? false
         guard granted else {
-            state.accessDenied = true
+            if !state.accessDenied { state.accessDenied = true }
+            if !state.events.isEmpty { state.events = [] }
+            if !state.weekEvents.isEmpty { state.weekEvents = [] }
             return
         }
 
         let calendar = Calendar.current
-        let start = calendar.startOfDay(for: Date())
-        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }
+        let now = Date()
+        guard let week = CalendarAgendaRange.week.interval(containing: now, calendar: calendar),
+              let today = CalendarAgendaRange.today.interval(containing: now, calendar: calendar) else { return }
+        let start = week.start
+        let end = week.end
 
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
         let mapped = store.events(matching: predicate).map { event in
             CalEvent(title: event.title ?? "Untitled",
                      start: event.startDate ?? start,
-                     colorHex: nil)
+                     colorHex: nil, end: event.endDate, isAllDay: event.isAllDay)
+        }.sorted { lhs, rhs in
+            if lhs.start != rhs.start { return lhs.start < rhs.start }
+            if lhs.title != rhs.title { return lhs.title < rhs.title }
+            if lhs.isAllDay != rhs.isAllDay { return lhs.isAllDay }
+            return (lhs.end ?? lhs.start) < (rhs.end ?? rhs.start)
         }
 
-        state.accessDenied = false
-        state.events = CalendarFormat.upcoming(mapped, now: Date(), limit: 4)
+        if state.accessDenied { state.accessDenied = false }
+        if state.weekEvents != mapped { state.weekEvents = mapped }
+        let upcoming = CalendarFormat.upcoming(mapped.filter { CalendarFormat.overlaps($0, interval: today) },
+                                               now: now, limit: 4)
+        if state.events != upcoming { state.events = upcoming }
     }
     private func openCalendarSettings() {
         let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
@@ -89,7 +107,7 @@ private struct CalendarDashboardBridge: View {
     let onGrantAccess: () -> Void
 
     var body: some View {
-        CalendarDashboardTile(events: box.events,
+        CalendarDashboardTile(events: box.weekEvents,
                               accessDenied: box.accessDenied,
                               onGrantAccess: onGrantAccess)
     }

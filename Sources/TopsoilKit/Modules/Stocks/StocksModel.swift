@@ -1,10 +1,17 @@
 import Foundation
 
-struct StockQuote: Equatable, Sendable {
-    var symbol: String
-    var price: Double
-    var previousClose: Double
-    var history: [Double]
+public struct StockQuote: Equatable, Sendable {
+    public var symbol: String
+    public var price: Double
+    public var previousClose: Double
+    public var history: [Double]
+
+    public init(symbol: String, price: Double, previousClose: Double, history: [Double]) {
+        self.symbol = symbol
+        self.price = price
+        self.previousClose = previousClose
+        self.history = history
+    }
 
     var changePercent: Double {
         guard previousClose > 0 else { return 0 }
@@ -64,7 +71,10 @@ enum StocksFetcher {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
             forHTTPHeaderField: "User-Agent"
         )
-        let (data, _) = try await URLSession.shared.data(for: req)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
         return try parse(data: data, symbol: symbol)
     }
 
@@ -91,5 +101,33 @@ enum StocksFetcher {
             previousClose: prevClose,
             history: closes.compactMap { $0 }
         )
+    }
+}
+
+/// Last successful content survives transient network failures, with explicit freshness.
+public struct MarketSnapshot: Equatable, Sendable {
+    public private(set) var quotes: [StockQuote] = []
+    public private(set) var staleSymbols: Set<String> = []
+    public private(set) var repos: [TrendingRepository] = []
+    public private(set) var reposStale = false
+
+    public init() {}
+
+    public mutating func applyQuotes(_ incoming: [StockQuote], tickers: [String]) {
+        let latest = Dictionary(incoming.map { ($0.symbol, $0) }, uniquingKeysWith: { _, last in last })
+        let previous = Dictionary(quotes.map { ($0.symbol, $0) }, uniquingKeysWith: { _, last in last })
+        quotes = tickers.compactMap { latest[$0] ?? previous[$0] }
+        staleSymbols = Set(tickers.filter { latest[$0] == nil })
+    }
+
+    public mutating func selectTickers(_ tickers: [String]) {
+        let selected = Set(tickers)
+        quotes.removeAll { !selected.contains($0.symbol) }
+        staleSymbols.formIntersection(selected)
+    }
+
+    public mutating func applyRepos(_ incoming: [TrendingRepository]?) {
+        reposStale = incoming == nil
+        if let incoming { repos = incoming }
     }
 }

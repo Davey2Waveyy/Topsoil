@@ -16,6 +16,10 @@ final class QuickTogglesModule: NotchModule {
 
     private let state = StateBox()
     private var caffeinateTask: Process?
+    private var darkModeInFlight = false
+    private var muteInFlight = false
+    private var dndInFlight = false
+    private var muteReadGeneration = 0
 
     // Observers — no polling timers at all.
     private var themeObserver: NSObjectProtocol?
@@ -34,6 +38,7 @@ final class QuickTogglesModule: NotchModule {
 
     func activate() {
         snapshotState()
+        guard themeObserver == nil, audioObserver == nil else { return }
 
         // Dark mode changes come via distributed notification — zero cost vs polling.
         themeObserver = DistributedNotificationCenter.default().addObserver(
@@ -64,20 +69,40 @@ final class QuickTogglesModule: NotchModule {
     // MARK: - Actions
 
     func toggleDarkMode() {
-        state.darkMode.toggle()
-        let target = state.darkMode
-        runOsascript("""
+        guard !darkModeInFlight else { return }
+        darkModeInFlight = true
+        let previous = state.darkMode
+        let target = !previous
+        state.darkMode = target
+        let script = """
         tell application "System Events"
             tell appearance preferences
                 set dark mode to \(target)
             end tell
         end tell
-        """)
+        """
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) { Self.runScript(script) }.value
+            guard let self else { return }
+            self.darkModeInFlight = false
+            if result == nil { self.state.darkMode = previous }
+        }
     }
 
     func toggleMute() {
+        guard !muteInFlight else { return }
+        muteInFlight = true
+        muteReadGeneration += 1
+        let previous = state.muted
         state.muted.toggle()
-        runOsascript("set volume output muted \(state.muted)")
+        let script = "set volume output muted \(state.muted)"
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) { Self.runScript(script) }.value
+            guard let self else { return }
+            self.muteInFlight = false
+            if result == nil { self.state.muted = previous }
+            self.refreshMute()
+        }
     }
 
     func toggleCaffeinate() {
@@ -100,6 +125,7 @@ final class QuickTogglesModule: NotchModule {
     }
 
     func toggleDoNotDisturb() {
+        guard !dndInFlight else { return }
         // Requires Accessibility permission. Check first and guide if not granted.
         guard AXIsProcessTrusted() else {
             let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
@@ -128,10 +154,14 @@ final class QuickTogglesModule: NotchModule {
             end tell
         end tell
         """
-        runOsascript(script)
-        // Re-read state after a brief delay for the Focus menu bar item to appear/disappear.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
-            self?.refreshDND()
+        dndInFlight = true
+        Task { [weak self] in
+            _ = await Task.detached(priority: .userInitiated) { Self.runScript(script) }.value
+            // Allow the menu bar to update after the script completes, without blocking UI.
+            try? await Task.sleep(for: .milliseconds(700))
+            guard let self else { return }
+            self.dndInFlight = false
+            self.refreshDND()
         }
     }
 
@@ -145,11 +175,15 @@ final class QuickTogglesModule: NotchModule {
     }
 
     private func refreshMute() {
+        guard !muteInFlight else { return }
+        muteReadGeneration += 1
+        let generation = muteReadGeneration
         Task.detached(priority: .utility) { [weak self] in
             let script = "output muted of (get volume settings)"
             let result = Self.runScript(script)
             await MainActor.run { [weak self] in
-                if let result { self?.state.muted = result.contains("true") }
+                guard let self, self.muteReadGeneration == generation, !self.muteInFlight else { return }
+                if let result { self.state.muted = result.contains("true") }
             }
         }
     }
@@ -172,20 +206,18 @@ final class QuickTogglesModule: NotchModule {
     }
 
     @discardableResult
-    private func runOsascript(_ source: String) -> String? { Self.runScript(source) }
-
-    @discardableResult
     private nonisolated static func runScript(_ source: String) -> String? {
         let task = Process()
         task.launchPath = "/usr/bin/osascript"
         task.arguments = ["-e", source]
         let pipe = Pipe()
         task.standardOutput = pipe
-        task.standardError = Pipe()
+        task.standardError = FileHandle.nullDevice
         do {
             try task.run()
-            task.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            task.waitUntilExit()
+            guard task.terminationStatus == 0 else { return nil }
             return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             return nil

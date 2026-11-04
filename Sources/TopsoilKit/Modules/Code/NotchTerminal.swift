@@ -18,17 +18,37 @@ public final class NotchTerminal: ObservableObject {
     /// so the buffer and first-responder state survive view updates.
     public let terminalView: LocalProcessTerminalView
 
+    public var onFocus: (() -> Void)?
+
+    private let focusHandler = TerminalFocusHandler()
+
+    @MainActor
+    private final class TerminalFocusHandler: NSObject {
+        weak var owner: NotchTerminal?
+
+        @objc func focus(_ sender: NSClickGestureRecognizer) {
+            guard let owner else { return }
+            owner.focus()
+        }
+    }
+
     private let delegateProxy = ProcessDelegateProxy()
 
     public init() {
         terminalView = LocalProcessTerminalView(frame: CGRect(x: 0, y: 0, width: 420, height: 260))
+        focusHandler.owner = self
+        let click = NSClickGestureRecognizer(target: focusHandler, action: #selector(TerminalFocusHandler.focus(_:)))
+        // Let SwiftTerm keep handling selection and terminal mouse reporting.
+        click.delaysPrimaryMouseButtonEvents = false
+        terminalView.addGestureRecognizer(click)
         delegateProxy.owner = self
         terminalView.processDelegate = delegateProxy
+        terminalView.getTerminal().changeScrollback(5_000)
         applyAppearance()
     }
 
     private func applyAppearance() {
-        terminalView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        terminalView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         terminalView.nativeForegroundColor = NSColor(srgbRed: 0.93, green: 0.94, blue: 0.96, alpha: 0.96)   // #EDEFF5
         terminalView.nativeBackgroundColor = .clear
         terminalView.installColors(Self.ansiPalette)
@@ -88,6 +108,16 @@ public final class NotchTerminal: ObservableObject {
 
     public func sendInput(_ text: String) {
         terminalView.send(txt: text)
+    }
+
+    public func scrollToLatest() {
+        terminalView.scroll(toPosition: 1)
+    }
+
+    public func focus() {
+        terminalView.window?.makeKey()
+        terminalView.window?.makeFirstResponder(terminalView)
+        onFocus?()
     }
 
     public func sendInterrupt() { sendInput("\u{03}") }

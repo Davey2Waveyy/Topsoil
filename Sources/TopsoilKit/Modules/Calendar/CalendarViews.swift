@@ -29,7 +29,7 @@ struct CalendarExpandedView: View {
                         Circle()
                             .fill(Color(red: 0.35, green: 0.78, blue: 1))
                             .frame(width: 5, height: 5)
-                        Text(CalendarFormat.timeLabel(event.start, calendar: .current))
+                        Text(CalendarFormat.eventLabel(event, now: Date(), calendar: .current))
                             .foregroundStyle(.white.opacity(0.85))
                         Text(event.title)
                             .foregroundStyle(.white.opacity(0.85))
@@ -48,43 +48,58 @@ struct CalendarDashboardTile: View {
     let events: [CalEvent]
     let accessDenied: Bool
     let onGrantAccess: () -> Void
+    @AppStorage("calendar.agendaRange") private var range: CalendarAgendaRange = .today
+    @Environment(\.notchTokens) private var tokens
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let now = Date()
+        let days = CalendarFormat.agenda(events, range: range, now: now, calendar: .current)
+        VStack(alignment: .leading, spacing: 8) {
             TileHeader(title: "Calendar", systemImage: "calendar")
-            Text(CalendarFormat.dayHeader(Date(), calendar: .current))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.top, 4)
-            Spacer(minLength: 0)
+            Picker("Agenda range", selection: $range) {
+                Text("Today").tag(CalendarAgendaRange.today)
+                Text("Week").tag(CalendarAgendaRange.week)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel("Calendar agenda range")
             if accessDenied {
-                Button(action: onGrantAccess) {
-                    Text("Grant Calendar access")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color(red: 0.35, green: 0.78, blue: 1))
-                }
-                .buttonStyle(.plain)
-            } else if events.isEmpty {
-                Text("Nothing left today")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.5))
+                Button("Grant Calendar access", action: onGrantAccess)
+                    .font(tokens.bodyFont)
+                    .tint(tokens.accent)
+            } else if days.isEmpty {
+                Text(range == .today ? "No events today" : "No events this week")
+                    .font(tokens.bodyFont)
+                    .foregroundStyle(tokens.textSecondary)
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(events.prefix(3).indices, id: \.self) { index in
-                        let event = events[index]
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color(red: 0.35, green: 0.78, blue: 1))
-                                .frame(width: 5, height: 5)
-                            Text(CalendarFormat.timeLabel(event.start, calendar: .current))
-                                .foregroundStyle(.white.opacity(0.85))
-                            Text(event.title)
-                                .foregroundStyle(.white.opacity(0.85))
-                                .lineLimit(1)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(days) { day in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(CalendarFormat.dayHeader(day.date, calendar: .current))
+                                    .font(tokens.captionFont)
+                                    .foregroundStyle(tokens.textSecondary)
+                                    .accessibilityAddTraits(.isHeader)
+                                ForEach(day.events.indices, id: \.self) { index in
+                                    let event = day.events[index]
+                                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                                        Text(CalendarFormat.eventLabel(event, now: now, calendar: .current))
+                                            .font(tokens.captionFont)
+                                            .foregroundStyle(tokens.textSecondary)
+                                            .frame(width: 42, alignment: .leading)
+                                        Text(event.title)
+                                            .font(tokens.bodyFont)
+                                            .foregroundStyle(tokens.textPrimary)
+                                            .lineLimit(2)
+                                    }
+                                    .accessibilityElement(children: .combine)
+                                }
+                            }
                         }
-                        .font(.system(size: 10))
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .accessibilityLabel(range == .today ? "Today's events" : "This week's events")
             }
             Spacer(minLength: 0)
         }
@@ -103,7 +118,7 @@ struct CalendarWideBar: View {
             WideBarItem(systemImage: "calendar.badge.exclamationmark", text: "Calendar off")
         } else if let next = events.first {
             WideBarItem(systemImage: "calendar",
-                        text: "\(CalendarFormat.timeLabel(next.start, calendar: .current))  \(next.title)")
+                        text: "\(CalendarFormat.eventLabel(next, now: Date(), calendar: .current))  \(next.title)")
         } else {
             WideBarItem(systemImage: "calendar", text: "No more today")
         }

@@ -10,8 +10,8 @@ public enum Launcher {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command.executable)
         process.arguments = command.arguments
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -29,9 +29,11 @@ public enum Launcher {
 
         if action == .editor {
             // `env <cli> <path>` exits non-zero (e.g. 127) when the CLI isn't on PATH.
-            let status = run(command, waitForExit: true)
-            if status != 0 {
-                run(LaunchCommand(executable: "/usr/bin/open", arguments: [path]))
+            DispatchQueue.global(qos: .userInitiated).async {
+                let status = run(command, waitForExit: true)
+                if status != 0 {
+                    run(LaunchCommand(executable: "/usr/bin/open", arguments: [path]))
+                }
             }
         } else {
             run(command)

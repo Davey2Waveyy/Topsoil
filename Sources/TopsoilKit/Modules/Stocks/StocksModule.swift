@@ -12,8 +12,7 @@ final class StocksModule: NotchModule {
 
     final class StateBox: ObservableObject {
         @Published var tickers: [String] = []
-        @Published var quotes: [StockQuote] = []
-        @Published var trendingRepos: [TrendingRepository] = []
+        @Published var snapshot = MarketSnapshot()
         @Published var installedSkills: [InstalledCodingSkill] = []
         @Published var isFetching = false
         @Published var isFetchingTrends = false
@@ -22,6 +21,10 @@ final class StocksModule: NotchModule {
     private let state = StateBox()
     private var tickers: [String]
     private var timer: Timer?
+    private var refreshPending = false
+    private var lastDiscoveryRefresh: Date?
+    private var lastRepoRefresh: Date?
+
 
     init() {
         tickers = UserDefaults.standard.stringArray(forKey: Self.tickersKey) ?? Self.defaultTickers
@@ -52,20 +55,48 @@ final class StocksModule: NotchModule {
     }
 
     func refresh() async {
+        guard !state.isFetching else {
+            refreshPending = true
+            return
+        }
         state.isFetching = true
-        state.isFetchingTrends = true
-        state.tickers = tickers
+        defer { state.isFetching = false }
 
-        async let quoteResult = StocksFetcher.fetch(symbols: tickers)
-        async let repoResult = fetchTrendingRepos()
-        let skillsTask = Task.detached { CodingSkillDiscovery.discover() }
+        repeat {
+            refreshPending = false
+            let requested = tickers
+            let now = Date()
+            let updateRepos = lastRepoRefresh.map { now.timeIntervalSince($0) >= 600 } ?? true
+            let updateSkills = lastDiscoveryRefresh.map { now.timeIntervalSince($0) >= 300 } ?? true
+            state.isFetchingTrends = updateRepos
 
-        state.quotes = await quoteResult
-        state.trendingRepos = await repoResult
-        state.installedSkills = await skillsTask.value
+            async let quotes = StocksFetcher.fetch(symbols: requested)
+            async let repos = updateRepos ? fetchTrendingRepos() : nil
+            let skillsTask = updateSkills ? Task.detached(priority: .utility) { CodingSkillDiscovery.discover() } : nil
 
-        state.isFetching = false
-        state.isFetchingTrends = false
+            let incomingQuotes = await quotes
+            // A ticker edit can occur while the request is suspended.
+            if requested == tickers {
+                var next = state.snapshot
+                next.applyQuotes(incomingQuotes, tickers: tickers)
+                if next != state.snapshot { state.snapshot = next }
+            } else {
+                refreshPending = true
+            }
+            if updateRepos {
+                let incomingRepos = await repos
+                var next = state.snapshot
+                next.applyRepos(incomingRepos)
+                if next != state.snapshot { state.snapshot = next }
+                if incomingRepos != nil { lastRepoRefresh = now }
+            }
+            if let skillsTask {
+                let skills = await skillsTask.value
+                if skills != state.installedSkills { state.installedSkills = skills }
+                lastDiscoveryRefresh = now
+            }
+            state.isFetchingTrends = false
+        } while refreshPending
     }
 
     func addTicker(_ symbol: String) {
@@ -79,9 +110,7 @@ final class StocksModule: NotchModule {
         let next = StockTickerSelection.remove(at: index, from: tickers)
         guard next != tickers else { return }
         setTickers(next)
-        if state.quotes.indices.contains(index) {
-            state.quotes.remove(at: index)
-        }
+        state.snapshot.selectTickers(next)
     }
 
     private func setTickers(_ next: [String]) {
@@ -90,7 +119,7 @@ final class StocksModule: NotchModule {
         UserDefaults.standard.set(next, forKey: Self.tickersKey)
     }
 
-    private func fetchTrendingRepos() async -> [TrendingRepository] {
+    private func fetchTrendingRepos() async -> [TrendingRepository]? {
         let since = Calendar(identifier: .gregorian)
             .date(byAdding: .day, value: -1, to: Date()) ?? Date()
         let url = GitHubTrendingRequest.url(since: since, limit: 5)
@@ -100,10 +129,10 @@ final class StocksModule: NotchModule {
         request.setValue(NotchBrand.userAgent, forHTTPHeaderField: "User-Agent")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
-            return (try? GitHubTrendingParser.parse(data)) ?? []
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            return try GitHubTrendingParser.parse(data)
         } catch {
-            return []
+            return nil
         }
     }
 
@@ -124,9 +153,11 @@ private struct StocksBridge: View {
 
     var body: some View {
         StocksDashboardTile(
-            quotes: box.quotes,
+            quotes: box.snapshot.quotes,
             tickers: box.tickers,
-            trendingRepos: box.trendingRepos,
+            trendingRepos: box.snapshot.repos,
+            staleSymbols: box.snapshot.staleSymbols,
+            reposStale: box.snapshot.reposStale,
             installedSkills: box.installedSkills,
             isFetching: box.isFetching,
             isFetchingTrends: box.isFetchingTrends,

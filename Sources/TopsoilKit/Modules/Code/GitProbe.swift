@@ -10,17 +10,17 @@ public enum GitProbe {
 
         let output = Pipe()
         process.standardOutput = output
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
         } catch {
             return .unknown
         }
+        // Drain while git runs: a full pipe otherwise blocks git before it can exit.
+        let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else { return .unknown }
-
-        let data = output.fileHandleForReading.readDataToEndOfFile()
         return GitStatusParser.parse(String(data: data, encoding: .utf8) ?? "")
     }
 }
