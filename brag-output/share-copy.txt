@@ -1,0 +1,2 @@
+Your notch is now a live dock for Claude Code, Codex, and Cursor.
+Topsoil puts real terminal panes, music controls, and a pixel plant directly in your hardware bezel — Swift 6, zero Electron, 100% local.

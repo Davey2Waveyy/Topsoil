@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Topsoil mark">
+  <!-- App tile with the notch carved out of the top edge -->
+  <path fill="#18181b" fill-rule="evenodd" d="
+    M10 2 H22 A8 8 0 0 1 30 10 V22 A8 8 0 0 1 22 30 H10 A8 8 0 0 1 2 22 V10 A8 8 0 0 1 10 2 Z
+    M10 2 L10 4.5 Q10 7 12.5 7 L19.5 7 Q22 7 22 4.5 L22 2 Z"/>
+  <!-- The panel, dropped just below the notch -->
+  <rect x="9" y="10.5" width="14" height="3.2" rx="1.6" fill="#15803d"/>
+</svg>

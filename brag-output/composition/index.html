@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>Topsoil — The Real Notch Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #06070a;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: #ffffff;
+    }
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #08090d;
+    }
+
+    /* Cinematic background with subtle gradient */
+    .bg-sheen {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(1300px 700px at 50% -10%, rgba(34, 197, 94, 0.12), transparent 60%),
+        radial-gradient(900px 600px at 50% 110%, rgba(59, 130, 246, 0.08), transparent 70%),
+        linear-gradient(180deg, #090b10 0%, #060709 100%);
+      pointer-events: none;
+    }
+    .grid-lines {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 80px 80px;
+      pointer-events: none;
+    }
+
+    /* Top hardware display bezel */
+    .display-bezel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: #050507;
+      border-bottom: 1px solid #1c1e28;
+      z-index: 70;
+      display: flex;
+      justify-content: center;
+    }
+    .hardware-notch {
+      width: 220px;
+      height: 44px;
+      background: #000000;
+      border-radius: 0 0 18px 18px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-top: none;
+    }
+    .camera-lens {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #1e293b, #000000);
+      border: 1.5px solid #334155;
+    }
+    .camera-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      position: absolute;
+      right: 30px;
+      opacity: 0;
+      box-shadow: 0 0 10px #22c55e;
+    }
+
+    .clip {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+    /* Frame container for actual app screenshots */
+    .screen-frame {
+      position: absolute;
+      top: 48px;
+      border-radius: 0 0 24px 24px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-top: none;
+      box-shadow: 0 35px 120px rgba(0, 0, 0, 0.8), 0 0 40px rgba(34, 197, 94, 0.15);
+      overflow: hidden;
+      background: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .screen-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      image-rendering: -webkit-optimize-contrast;
+    }
+
+    /* Virtual cursor */
+    .virtual-cursor {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      z-index: 100;
+      pointer-events: none;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.6));
+    }
+
+    /* Callout pill badges */
+    .feature-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .pill-green {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid #22c55e;
+      color: #86efac;
+    }
+    .pill-blue {
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+    }
+
+    /* Focus highlight rings on screenshot features */
+    .highlight-ring {
+      position: absolute;
+      border-radius: 14px;
+      border: 2px solid #22c55e;
+      box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* Outro styles */
+    .outro-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .brand-icon {
+      width: 110px;
+      height: 110px;
+      border-radius: 28px;
+      background: #12141c;
+      border: 1px solid rgba(255,255,255,0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 15px 50px rgba(0,0,0,0.6), 0 0 35px rgba(34, 197, 94, 0.25);
+    }
+    .brand-title {
+      font-size: 88px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: #ffffff;
+      margin: 20px 0 6px 0;
+    }
+    .brand-tagline {
+      font-size: 26px;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 30px;
+    }
+    .spec-badges {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+    .spec-tag {
+      padding: 8px 22px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 9999px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .cta-btn {
+      padding: 16px 42px;
+      background: #22c55e;
+      color: #000000;
+      border-radius: 9999px;
+      font-size: 19px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(34, 197, 94, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div
+    id="root"
+    data-composition-id="topsoil-brag"
+    data-start="0"
+    data-width="1920"
+    data-height="1080"
+    data-duration="18"
+  >
+    <div class="bg-sheen"></div>
+    <div class="grid-lines"></div>
+
+    <!-- Top Hardware Display Bezel -->
+    <div class="display-bezel" id="bezel">
+      <div class="hardware-notch" id="notch">
+        <div class="camera-lens"></div>
+        <div class="camera-indicator" id="cam-led"></div>
+      </div>
+    </div>
+
+    <!-- Virtual Cursor -->
+    <svg class="virtual-cursor" id="cursor" viewBox="0 0 24 24" fill="none">
+      <path d="M4 2L20 12L12.5 13.5L8.5 21.5L4 2Z" fill="#ffffff" stroke="#000000" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>
+
+    <!-- SCENE 1: THE REAL COMPACT NOTCH HOVER (0.0s - 3.82s) -->
+    <section id="scene-1" class="clip" data-start="0" data-duration="3.82">
+      <!-- Real Compact Dropdown -->
+      <div class="screen-frame" id="s1-compact" style="width: 520px; top: 48px; border-radius: 0 0 20px 20px;">
+        <img src="assets/img/compact_panel.png" alt="Real Topsoil Compact Notch Dropdown" />
+      </div>
+
+      <div style="position: absolute; bottom: 100px; text-align: center;" id="s1-text">
+        <div class="feature-pill pill-green" id="s1-pill">Real macOS App · Hover Peek</div>
+        <h1 style="font-size: 58px; font-weight: 800; letter-spacing: -0.03em; margin: 16px 0 0 0;" id="s1-title">
+          YOUR NOTCH IS NOW A LIVE DOCK.
+        </h1>
+        <p style="font-size: 22px; color: #94a3b8; margin: 8px 0 0 0;" id="s1-sub">
+          One hover opens your workspace. One click reveals the full dashboard.
+        </p>
+      </div>
+    </section>
+
+    <!-- SCENE 2: THE REAL EXPANDED SURFACE & NOW PLAYING (3.82s - 8.02s) -->
+    <section id="scene-2" class="clip" data-start="3.82" data-duration="4.20">
+      <div class="screen-frame" id="s2-dashboard" style="width: 1540px; top: 48px;">
+        <img src="assets/img/now_playing_tab.png" alt="Real Topsoil Now Playing Tab" />
+      </div>
+
+      <div style="position: absolute; bottom: 100px; text-align: center;" id="s2-text">
+        <div class="feature-pill pill-blue">Page 1/4 · Now Playing & System Surface</div>
+        <h2 style="font-size: 50px; font-weight: 800; letter-spacing: -0.03em; margin: 14px 0 0 0;">
+          BORDERLESS. ZERO WINDOW CLUTTER.
+        </h2>
+        <p style="font-size: 22px; color: #94a3b8; margin: 8px 0 0 0;">
+          Live music controls, files, and calendar docked directly into the camera cutout.
+        </p>
+      </div>
+    </section>
+
+    <!-- SCENE 3: REAL CODING AGENTS & STEM/LEAVES (8.02s - 13.01s) -->
+    <section id="scene-3" class="clip" data-start="8.02" data-duration="4.99">
+      <!-- Real Code Tab Screenshot -->
+      <div class="screen-frame" id="s3-code" style="width: 1540px; top: 48px;">
+        <img src="assets/img/code_tab.png" alt="Real Topsoil Code Tab with Claude, Codex, Cursor, and Stem & Leaves" />
+      </div>
+
+      <!-- Real Stocks Tab Screenshot (Slides in on second half of scene) -->
+      <div class="screen-frame" id="s3-stocks" style="width: 1540px; top: 48px; opacity: 0;">
+        <img src="assets/img/stocks_tab.png" alt="Real Topsoil Stocks Tab with Market Sparklines, Repos, and Skills" />
+      </div>
+
+      <!-- Highlight ring over Claude Code terminal -->
+      <div class="highlight-ring" id="ring-claude" style="top: 146px; left: 240px; width: 335px; height: 185px;"></div>
+
+      <!-- Highlight ring over Stem & Leaves plant -->
+      <div class="highlight-ring" id="ring-garden" style="top: 146px; left: 1320px; width: 335px; height: 185px;"></div>
+
+      <div style="position: absolute; bottom: 85px; text-align: center;" id="s3-text">
+        <div class="feature-pill pill-green" id="s3-pill">Page 2/4 · Claude Code, Codex, & Cursor</div>
+        <h2 style="font-size: 48px; font-weight: 800; letter-spacing: -0.03em; margin: 12px 0 0 0;" id="s3-title">
+          THREE CODING AGENTS DOCKED IN YOUR NOTCH.
+        </h2>
+        <p style="font-size: 21px; color: #94a3b8; margin: 8px 0 0 0;" id="s3-sub">
+          Live Claude Code terminal with Opus 5 · Plus a pixel plant that grows while your agents ship code.
+        </p>
+      </div>
+    </section>
+
+    <!-- SCENE 4: REAL NATIVE STACK & OUTRO (13.01s - 18.00s) -->
+    <section id="scene-4" class="clip" data-start="13.01" data-duration="4.99">
+      <div class="outro-card">
+        <div class="brand-icon" id="s4-icon">
+          <svg viewBox="0 0 32 32" width="68" height="68" aria-hidden="true">
+            <path fill="#ffffff" fill-rule="evenodd" d="M10 2 H22 A8 8 0 0 1 30 10 V22 A8 8 0 0 1 22 30 H10 A8 8 0 0 1 2 22 V10 A8 8 0 0 1 10 2 Z M10 2 L10 4.5 Q10 7 12.5 7 L19.5 7 Q22 7 22 4.5 L22 2 Z"/>
+            <rect x="9" y="10.5" width="14" height="3.2" rx="1.6" fill="#22c55e"/>
+          </svg>
+        </div>
+        <h1 class="brand-title" id="s4-title">Topsoil</h1>
+        <p class="brand-tagline" id="s4-sub">Your notch is now the best part of your screen.</p>
+
+        <div class="spec-badges" id="s4-specs">
+          <div class="spec-tag">⚡ Native Swift 6 & SwiftUI</div>
+          <div class="spec-tag">🛡️ Zero Electron</div>
+          <div class="spec-tag">🔒 100% Local by Default</div>
+          <div class="spec-tag"> macOS 14+</div>
+        </div>
+
+        <div class="cta-btn" id="s4-btn">
+          <span>Download for Mac</span>
+          <span style="opacity: 0.7;">— Free & Open Source</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUDIO LAYER -->
+    <!-- Music: Upbeat 120 BPM Business Groove -->
+    <audio id="bg-music" data-start="0" data-duration="18" data-track-index="10" data-volume="0.35" src="assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3"></audio>
+
+    <!-- Sound Effects -->
+    <audio id="sfx-hover" data-start="0.80" data-duration="0.18" data-track-index="11" data-volume="0.75" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+    <audio id="sfx-click" data-start="2.80" data-duration="0.01" data-track-index="12" data-volume="0.80" src="assets/sfx/interface/click_002.ogg"></audio>
+    <audio id="sfx-expand" data-start="3.82" data-duration="0.11" data-track-index="13" data-volume="0.80" src="assets/sfx/interface/drop_001.ogg"></audio>
+    <audio id="sfx-switch1" data-start="8.02" data-duration="0.62" data-track-index="14" data-volume="0.75" src="assets/sfx/interface/switch_001.ogg"></audio>
+    <audio id="sfx-ding" data-start="10.20" data-duration="0.26" data-track-index="15" data-volume="0.80" src="assets/sfx/casino/chips-collide-1.ogg"></audio>
+    <audio id="sfx-switch2" data-start="11.20" data-duration="0.62" data-track-index="16" data-volume="0.75" src="assets/sfx/interface/switch_001.ogg"></audio>
+    <audio id="sfx-bell" data-start="13.51" data-duration="1.48" data-track-index="17" data-volume="0.90" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // Initial setup via GSAP
+    gsap.set("#cursor", { x: 1200, y: 700, opacity: 0 });
+    gsap.set("#s1-compact", { y: -500, opacity: 0 });
+    gsap.set("#s1-text", { y: 40, opacity: 0 });
+
+    gsap.set("#s2-dashboard", { scale: 0.95, y: -100, opacity: 0 });
+    gsap.set("#s2-text", { y: 40, opacity: 0 });
+
+    gsap.set("#s3-code", { y: -60, opacity: 0 });
+    gsap.set("#s3-stocks", { y: 30, opacity: 0 });
+    gsap.set("#s3-text", { y: 30, opacity: 0 });
+    gsap.set("#ring-claude", { scale: 0.8, opacity: 0 });
+    gsap.set("#ring-garden", { scale: 0.8, opacity: 0 });
+
+    gsap.set("#s4-icon", { scale: 0.6, opacity: 0 });
+    gsap.set("#s4-title", { y: 30, opacity: 0 });
+    gsap.set("#s4-sub", { y: 20, opacity: 0 });
+    gsap.set("#s4-specs", { y: 20, opacity: 0 });
+    gsap.set("#s4-btn", { scale: 0.9, opacity: 0 });
+
+    // ==========================================
+    // SCENE 1: THE REAL COMPACT NOTCH HOVER (0.0s - 3.82s)
+    // ==========================================
+    // Cursor glides up to the notch
+    tl.to("#cursor", { opacity: 1, duration: 0.3 }, 0.3);
+    tl.to("#cursor", { x: 960, y: 40, duration: 0.8, ease: "power2.inOut" }, 0.4);
+
+    // Compact panel drops on hover at 0.8s
+    tl.to("#cam-led", { opacity: 1, duration: 0.1 }, 0.8);
+    tl.to("#s1-compact", { y: 0, opacity: 1, duration: 0.7, ease: "elastic.out(1, 0.8)" }, 0.8);
+    tl.to("#s1-text", { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 1.0);
+
+    // Cursor glides down to "Dashboard >" button inside the compact panel
+    tl.to("#cursor", { x: 1140, y: 460, duration: 0.9, ease: "power2.inOut" }, 1.7);
+    // Cursor clicks at 2.80s
+    tl.to("#cursor", { scale: 0.8, duration: 0.1, yoyo: true, repeat: 1 }, 2.80);
+
+    // Scene 1 exit
+    tl.to(["#s1-compact", "#s1-text"], { opacity: 0, y: -40, duration: 0.3, ease: "power2.in" }, 3.50);
+    tl.to("#cursor", { opacity: 0, duration: 0.2 }, 3.50);
+
+    // ==========================================
+    // SCENE 2: THE REAL EXPANDED SURFACE (3.82s - 8.02s)
+    // Beat-locked entry at 3.82s
+    // ==========================================
+    tl.to("#s2-dashboard", { scale: 1, y: 0, opacity: 1, duration: 0.65, ease: "back.out(1.4)" }, 3.82);
+    tl.to("#s2-text", { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 4.20);
+
+    // Scene 2 exit
+    tl.to(["#s2-dashboard", "#s2-text"], { opacity: 0, y: -40, duration: 0.35, ease: "power2.in" }, 7.65);
+
+    // ==========================================
+    // SCENE 3: REAL CODE & AGENT PANES (8.02s - 13.01s)
+    // Tab flip to Code at 8.02s
+    // ==========================================
+    tl.to("#s3-code", { y: 0, opacity: 1, duration: 0.6, ease: "back.out(1.5)" }, 8.02);
+    tl.to("#s3-text", { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 8.20);
+
+    // Focus highlight on Claude Code terminal pane at 8.8s
+    tl.to("#ring-claude", { scale: 1, opacity: 1, duration: 0.35, ease: "power2.out" }, 8.80);
+
+    // Focus highlight on Stem & Leaves garden pane at 10.20s (ding sound!)
+    tl.to("#ring-claude", { opacity: 0, duration: 0.2 }, 10.10);
+    tl.to("#ring-garden", { scale: 1, opacity: 1, duration: 0.35, ease: "power2.out" }, 10.20);
+
+    // Crossfade to Stocks tab (Page 3) at 11.20s
+    tl.to("#ring-garden", { opacity: 0, duration: 0.2 }, 11.10);
+    tl.to("#s3-code", { opacity: 0, duration: 0.3 }, 11.20);
+    tl.to("#s3-stocks", { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 11.20);
+    tl.set("#s3-pill", { innerText: "Page 3/4 · Stocks, Repos, & Installed Skills" }, 11.20);
+    tl.set("#s3-title", { innerText: "TRENDING REPOS & AGENT SKILLS BUILT IN." }, 11.20);
+    tl.set("#s3-sub", { innerText: "Market sparklines · GitHub trending · Instant access to your skill library." }, 11.20);
+
+    // Scene 3 exit
+    tl.to(["#s3-stocks", "#s3-text"], { opacity: 0, y: -40, duration: 0.35, ease: "power2.in" }, 12.65);
+
+    // ==========================================
+    // SCENE 4: BRAND OUTRO & CTA (13.01s - 18.00s)
+    // Strong bell hit at 13.51s
+    // ==========================================
+    tl.to("#s4-icon", { scale: 1, opacity: 1, duration: 0.5, ease: "back.out(1.8)" }, 13.20);
+    tl.to("#s4-title", { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 13.40);
+    tl.to("#s4-sub", { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 13.60);
+    tl.to("#s4-specs", { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 13.80);
+    tl.to("#s4-btn", { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.6)" }, 14.10);
+
+    // Button pulse
+    tl.to("#s4-btn", { scale: 1.04, duration: 0.6, repeat: 3, yoyo: true, ease: "sine.inOut" }, 14.70);
+
+    // Clean fade out
+    tl.to(["#scene-4", "#bezel", ".bg-sheen", ".grid-lines"], { opacity: 0, duration: 0.8, ease: "power2.inOut" }, 17.20);
+
+    window.__timelines = window.__timelines || {};
+    window.__timelines["topsoil-brag"] = tl;
+  </script>
+</body>
+</html>
