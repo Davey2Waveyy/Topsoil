@@ -96,3 +96,5 @@ renders whatever modules are enabled, in order — adding a module is drop-in.
 This is **Phase 1**. Later modules (weather, Pomodoro, GitHub, notifications,
 translation, Bluetooth, and the AirDrop/zip/convert *drop actions*) plug into the
 same `NotchModule` seam.
+
+Build artifacts land in `./build` (git-ignored).
